@@ -43,7 +43,7 @@ function sendToDiscord(to_be_sent){
 }
 
 function getCurveName(curveAa){
-	return curveAa.aa_address.slice(0,16) + '... ' + curveAa.asset_2_symbol + ' - ' + curveAa.interest_rate + '%';
+	return curveAa.aa_address + (curveAa.asset2_symbol ? (' - ' + curveAa.asset2_symbol) : '') + ' - ' + curveAa.interest_rate + '%';
 }
 
 function applyDecimals(amount, decimals){
@@ -61,24 +61,42 @@ function announceNewDeposit(curveAa, depositsAa, amount, stable_amount, owner, t
 
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
-	.setTitle(getCurveName(curveAa))
-	.setDescription(owner +' deposits ' + applyDecimals(amount, curveAa.asset2_decimals) + curveAa.asset2_symbol + ' and gets ' 
-	+ applyDecimals(stable_amount, depositsAa.asset_decimals) + depositsAa.asset_symbol )
+	.setTitle('New deposit for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa))
+	.addFields({name: "Locked", value: applyDecimals(amount, curveAa.asset2_decimals) + ' ' + (curveAa.asset2_symbol  || 'tokens2') }) 
+	.addFields({name: "Minted", value: applyDecimals(stable_amount, depositsAa.asset_decimals) + ' ' + (depositsAa.asset_symbol  || 'stablecoins') })
+	.addFields({name: 'Owner', value: owner})
 	.addFields({name: 'Trigger unit', value: '[' + trigger_unit + ']('+conf.explorer_base_url + trigger_unit+')'});
 
 	sendToDiscord(objEmbed);
 }
 
-function announceClosingDeposit(curveAa, depositsAa, author, id, bForceClose,  stable_token_to_aa_amount, interest_token_from_aa_amount, trigger_unit){
-	var description = linkToGui(curveAa)
-	description += bForceClose ? author + ' force closes deposit #' + id : 
-	author +' closes deposit #'+ id +' with ' + applyDecimals(stable_token_to_aa_amount, depositsAa.asset_decimals) + ' ' + (curveAa.asset2_symbol || 'tokens2') + ' and unlocks ' 
-	+ applyDecimals(interest_token_from_aa_amount, curveAa.asset2_decimals) +  ' ' + (curveAa.asset2_symbol || 'tokens2');
+function announceClosingDeposit(curveAa, depositsAa, owner, id, stable_amount, token2_amount, trigger_unit){
 
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
-	.setTitle(getCurveName(curveAa))
-	.setDescription(description)
+	.setTitle('Closed deposit for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa))
+	.addFields({name: "Burnt", value: applyDecimals(stable_amount, depositsAa.asset_decimals) + ' ' + (depositsAa.asset_symbol  || 'stablecoins')})
+	.addFields({name: "Unlocked", value: applyDecimals(token2_amount, curveAa.asset2_decimals) + ' ' + (curveAa.asset2_symbol  || 'tokens2')})
+	.addFields({name: "Id", value: '#'+ id})
+	.addFields({name: 'Owner', value: owner})
+	.addFields({name: 'Trigger unit', value: '[' + trigger_unit + ']('+conf.explorer_base_url + trigger_unit+')'});
+
+	sendToDiscord(objEmbed);
+}
+
+function announceForceClosePending(curveAa, depositsAa, trigger_address, id, stable_amount, trigger_unit){
+
+	const objEmbed = new Discord.MessageEmbed()
+	.setColor('#0099ff')
+	.setTitle('Pending deposit force close for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa))
+	.addFields({
+		name: "Amount sent", value: applyDecimals(stable_amount, depositsAa.asset_decimals) + ' ' + (depositsAa.asset_symbol  || 'stablecoins'),
+	})
+	.addFields({name: "Id", value: '#'+ id})
+	.addFields({name: 'Closer', value: trigger_address})
 	.addFields({name: 'Trigger unit', value: '[' + trigger_unit + ']('+conf.explorer_base_url + trigger_unit+')'});
 
 	sendToDiscord(objEmbed);
@@ -88,10 +106,10 @@ function announceParameterChange(curveAa, param, value){
 
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
-	.setTitle(getCurveName(curveAa))
-	.setDescription(linkToGui(curveAa) + 'Parameter changed')
+	.setTitle('Parameter changed for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa))
 	.addFields(
-		{ name: "Param", value: param, inline: true  },
+		{ name: "Param", value: param, inline: true },
 		{ name: "Value", value: value, inline: true },
 		{ name: '\u200B', value: '\u200B' , inline: true 	}); // empty column to create a new row
 	sendToDiscord(objEmbed);
@@ -100,10 +118,9 @@ function announceParameterChange(curveAa, param, value){
 function announceGrantAttributed(curveAa, grant, recipient, amount){
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
-	.setTitle(getCurveName(curveAa))
-	.setDescription('Grant #'+grant +' attributed, ' + applyDecimals(amount, curveAa.asset1_decimals)+ curveAa.asset1_symbol + ' sent to ' + recipient);
+	.setTitle('Grant attributed for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa) + 'Grant #'+grant +' attributed, ' + applyDecimals(amount, curveAa.asset1_decimals)+ curveAa.asset1_symbol + ' sent to ' + recipient);
 	sendToDiscord(objEmbed);
-
 }
 
 function addPlus(amount){
@@ -114,23 +131,32 @@ function addPlus(amount){
 	return amount.toString();
 }
 
-function announceSupplyChange(curveAa, reserve_added, asset1_added, asset2_added, p2, trigger_unit){
+function announceSupplyChange(curveAa, reserve_added, asset1_added, asset2_added, p2, target_p2, trigger_unit){
+
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
-	.setTitle(getCurveName(curveAa))
-	.setDescription('Supply changed, new price p2: ' + p2)
+	.setTitle('Supply change for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa))
 	.addFields(
-		{ name: "Asset", value: [
-			(curveAa.reserve_asset_symbol || 'reserve asset'),
-			(curveAa.asset1_symbol  || 'token1'),
-			(curveAa.asset2_symbol  || 'token2')
-		], inline: true 
+		{
+			name: "New p2 price",
+			value: Math.pow(p2, 1 / (curveAa.leverage - 1)).toPrecision(6)
+		},
+		{
+			name: "New p2 price target",
+			value: Math.pow(target_p2, 1 / (curveAa.leverage - 1)).toPrecision(6)
 		},
 		{ name: "Supply change", value: [
 			addPlus(applyDecimals(reserve_added, curveAa.reserve_asset_decimals)),
 			addPlus(applyDecimals(asset1_added, curveAa.asset1_decimals)),
 			addPlus(applyDecimals(asset2_added, curveAa.asset2_decimals)),
 		], inline: true },
+		{ name: "Asset", value: [
+			(curveAa.reserve_asset_symbol || 'reserve asset'),
+			(curveAa.asset1_symbol  || 'token1'),
+			(curveAa.asset2_symbol  || 'token2')
+		], inline: true 
+		},
 		{ name: '\u200B', value: '\u200B' , inline: true 	})// empty column to create a new row
 		.addFields({name: 'Trigger unit', value: '[' + trigger_unit + ']('+conf.explorer_base_url + trigger_unit+')'});
 	sendToDiscord(objEmbed);
@@ -142,8 +168,8 @@ function announceAddedSupport(curveAa, trigger_address, amountToAa, param, value
 
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
-	.setTitle(getCurveName(curveAa))
-	.setDescription(trigger_address +' adds ' + applyDecimals(amountToAa, curveAa.asset1_decimals) + ' ' + (curveAa.asset1_symbol || 'token1') + ' in support to value `' + value +'` for parameter `'+param +'`')
+	.setTitle('New parameter change support for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa) + trigger_address +' adds ' + applyDecimals(amountToAa, curveAa.asset1_decimals) + ' ' + (curveAa.asset1_symbol || 'token1') + ' in support to value `' + value +'` for parameter `'+param +'`')
 	.addFields(
 		{ name: "Value", value: value, inline: true },
 		{ name: "Support", value: applyDecimals(support, curveAa.asset1_decimals) + ' ' + (curveAa.asset1_symbol || 'token1'), inline: true},
@@ -161,8 +187,8 @@ function announceAddedSupport(curveAa, trigger_address, amountToAa, param, value
 function announceRemovedSupport(curveAa, trigger_address, param, leader, leader_support, trigger_unit){
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
-	.setTitle(getCurveName(curveAa))
-	.setDescription(trigger_address +' removes its vote about parameter ' + param)
+	.setTitle('Parameter change support removed for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa) + trigger_address +' removes its vote about parameter ' + param)
 	.addFields(
 		{ name: "Leader value", value: leader, inline: true },
 		{ name: "Support", value: applyDecimals(leader_support, curveAa.asset1_decimals) + ' ' + (curveAa.asset1_symbol || 'token1'), inline: true },
@@ -174,10 +200,9 @@ function announceRemovedSupport(curveAa, trigger_address, param, leader, leader_
 }
 
 
-function convertToGbString (amount){
-	return (amount/1e9 >=1 ? ((amount/1e9).toPrecision(6)/1).toLocaleString(): ((amount/1e9).toPrecision(6)/1)) + ' GB'
+function log(n, base) {
+	return Math.log(n) / Math.log(base);
 }
-
 
 exports.announceAddedSupport = announceAddedSupport;
 exports.announceNewDeposit = announceNewDeposit;
@@ -186,3 +211,4 @@ exports.announceParameterChange = announceParameterChange;
 exports.announceGrantAttributed = announceGrantAttributed;
 exports.announceSupplyChange = announceSupplyChange;
 exports.announceRemovedSupport = announceRemovedSupport;
+exports.announceForceClosePending = announceForceClosePending;

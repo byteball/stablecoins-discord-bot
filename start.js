@@ -91,10 +91,13 @@ async function treatResponseFromDepositsAA(objResponse){
 	const stable_token_to_aa_amount = getAmountToAa(objTriggerUnit, depositAaAddress, depositsAa.asset) - getAmountFromAa(objResponseUnit, depositAaAddress, depositsAa.asset)
 
 	if (stable_token_to_aa_amount > 0 && data.id){
-		const interest_token_from_aa_amount =  getAmountFromAa(objResponseUnit, depositAaAddress, curveAa.asset2)
 		const vars = getStateVarsForPrefix(depositAaAddress, 'deposit_' + data.id + '_force_close');
+		if (vars[ 'deposit_' + data.id + '_force_close'])
+			return announceForceClosePending(curveAa, depositsAa, objResponse.trigger_address, data.id,  
+			stable_token_to_aa_amount, objResponse.trigger_unit)
 
-		return announcements.announceClosingDeposit(curveAa, depositsAa, objResponse.trigger_address, data.id, !!vars[ 'deposit_' + data.id + '_force_close'],  
+		const interest_token_from_aa_amount = getAmountFromAa(objResponseUnit, depositAaAddress, curveAa.asset2)
+		return announcements.announceClosingDeposit(curveAa, depositsAa, objResponse.trigger_address, data.id,  
 		stable_token_to_aa_amount, interest_token_from_aa_amount, objResponse.trigger_unit);
 	}
 	
@@ -122,12 +125,9 @@ async function treatResponseFromCurveAA(objResponse){
 		const asset1_added = getAmountFromAa(objResponseUnit, curveAaAddress, curveAa.asset1) - getAmountToAa(objTriggerUnit, curveAaAddress, curveAa.asset1); // can be negative
 		const asset2_added = getAmountFromAa(objResponseUnit, curveAaAddress, curveAa.asset2) - getAmountToAa(objTriggerUnit, curveAaAddress, curveAa.asset2); // can be negative
 
-		return announcements.announceSupplyChange(curveAa, reserve_added, asset1_added, asset2_added, objResponse.response.responseVars.p2, objResponse.trigger_unit)
-
+		return announcements.announceSupplyChange(curveAa, reserve_added, asset1_added, asset2_added, objResponse.response.responseVars.p2, objResponse.response.responseVars.target_p2, objResponse.trigger_unit)
 	}
 
-		
-		//trigger.address == var['governance_aa'] AND $allow_grants AND trigger.data.grant AND trigger.data.recipient AND trigger.data.amount 
 }
 
 
@@ -234,6 +234,11 @@ async function watchDepositsAa(objAa){
 	});
 }
 
+async function watchCurveAa(objAa){
+	walletGeneral.addWatchedAddress(objAa.address, () => {
+		saveAllCurveAaParams(objAa);
+	});
+}
 
 async function saveAllDepositsParams(objAa){
 	const depositsAaAddress = objAa.address;
@@ -241,12 +246,15 @@ async function saveAllDepositsParams(objAa){
 
 	const vars = await getStateVars(depositsAaAddress);
 	const asset = vars['asset'];
-	const registryVars = await getStateVarsForPrefixes(conf.token_registry_aa_address, ['a2s_' + asset, 'decimals_' + asset]);
+	var registryVars = await getStateVarsForPrefixes(conf.token_registry_aa_address, ['a2s_' + asset, 'current_desc_' + asset]);
+
+	const current_desc = registryVars['current_desc_' + asset];
+	registryVars = Object.assign(registryVars, await getStateVarsForPrefixes(conf.token_registry_aa_address, ['decimals_' + current_desc]));
 
 	assocDepositsAas[depositsAaAddress] = {
 		asset,
 		asset_symbol: registryVars['a2s_' + asset],
-		asset_decimals: registryVars['decimals_' + asset],
+		asset_decimals: registryVars['decimals_' + current_desc],
 		curveAaAddress
 	}
 	assocDepositsAasByCurves[curveAaAddress] = assocDepositsAas[depositsAaAddress];
@@ -263,11 +271,7 @@ async function discoverCurveAas(){
 	});
 }
 
-async function watchCurveAa(objAa){
-	walletGeneral.addWatchedAddress(objAa.address, () => {
-		saveAllCurveAaParams(objAa);
-	});
-}
+
 
 async function watchGovernanceAa(governanceAaAddress, curveAaAddress){
 	walletGeneral.addWatchedAddress(governanceAaAddress, () => {
@@ -283,8 +287,14 @@ async function saveAllCurveAaParams(objAa){
 	const reserve_asset = objAa.definition[1].params.reserve_asset;
 
 	const curveAaVars = await getStateVars(curveAaAddress);
-	const registryVars = await getStateVarsForPrefixes(conf.token_registry_aa_address, ['a2s_' + curveAaVars.asset1, 'a2s_' + curveAaVars.asset2, 'a2s_' + reserve_asset, 'decimals_' + reserve_asset]);
-	
+	var registryVars = await getStateVarsForPrefixes(conf.token_registry_aa_address, [
+		'a2s_' + curveAaVars.asset1, 
+		'a2s_' + curveAaVars.asset2, 
+		'a2s_' + reserve_asset, 
+		'current_desc_' + reserve_asset
+	]);
+	const current_desc = registryVars['current_desc_' + reserve_asset];
+	registryVars = Object.assign(registryVars, await getStateVarsForPrefixes(conf.token_registry_aa_address, ['decimals_' + current_desc]));
 	assocCurveAas[curveAaAddress] = {
 		aa_address: curveAaAddress,
 		governance_aa: curveAaVars.governance_aa,
@@ -293,11 +303,12 @@ async function saveAllCurveAaParams(objAa){
 		interest_rate: curveAaVars.interest_rate,
 		asset1_decimals: objAa.definition[1].params.decimals1,
 		asset2_decimals: objAa.definition[1].params.decimals2,
-		asset_1_symbol: registryVars['a2s_' + curveAaVars.asset1],
-		asset_2_symbol: registryVars['a2s_' + curveAaVars.asset2],
+		asset1_symbol: registryVars['a2s_' + curveAaVars.asset1],
+		asset2_symbol: registryVars['a2s_' + curveAaVars.asset2],
 		reserve_asset,
-		reserve_asset_decimals: reserve_asset == 'base' ? 9 : registryVars['decimals_' + reserve_asset],
-		reserve_asset_symbol: reserve_asset == 'base' ? 'GB' : registryVars['a2s_' + reserve_asset]
+		reserve_asset_decimals: reserve_asset == 'base' ? 9 : registryVars['decimals_' + current_desc],
+		reserve_asset_symbol: reserve_asset == 'base' ? 'GB' : registryVars['a2s_' + reserve_asset],
+		leverage: objAa.definition[1].params.leverage || 0
 	}
 	watchGovernanceAa(curveAaVars.governance_aa, curveAaAddress);
 	console.log(assocCurveAas[curveAaAddress]);
@@ -305,15 +316,9 @@ async function saveAllCurveAaParams(objAa){
 
 function handleJustsaying(ws, subject, body) {
 	switch (subject) {
-		case 'light/aa_response':
-		//		onAAResponse(body);
-			break;
-		case 'light/aa_request':
-		//	onAARequest(body);
-			break;
 		case 'light/aa_definition':
-				onAADefinition(body);
-			break;
+			onAADefinition(body);
+		break;
 	}
 }
 
