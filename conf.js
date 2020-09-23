@@ -10,7 +10,7 @@ exports.discord_channels = [process.env.channel];
 
 exports.hub = process.env.testnet ? 'obyte.org/bb-test' : 'obyte.org/bb';
 exports.explorer_base_url = process.env.testnet ? 'https://testnetexplorer.obyte.org/#' : 'https://explorer.obyte.org/#';
-exports.stablecoins_base_url = process.env.testnet ? 'https://ostable.org/trade/' : 'https://testnet.ostable.org/trade/';
+exports.stablecoins_base_url = process.env.testnet ? 'https://testnet.ostable.org/trade/' : 'https://ostable.org/trade/';
 
 exports.curve_base_aa = process.env.testnet ? "FCFYMFIOGS363RLDLEWIDBIIBU7M7BHP" : "FCFYMFIOGS363RLDLEWIDBIIBU7M7BHP";
 exports.governance_base_aa = process.env.testnet ? "Y4VBXMROK5BWBKSYYAMUW7QUEZFXYBCF" : "Y4VBXMROK5BWBKSYYAMUW7QUEZFXYBCF";
