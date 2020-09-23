@@ -67,15 +67,13 @@ async function treatResponseFromGovernanceAA(objResponse){
 
 
 async function treatResponseFromDepositsAA(objResponse){
-	console.log(' ________________________________ treatResponseFromDepositsAA');
-	console.log(JSON.stringify(objResponse));
 
 	const objTriggerUnit = await storage.readUnit(objResponse.trigger_unit);
 	if (!objTriggerUnit)
 		throw Error('trigger unit not found ' + objResponse.trigger_unit);
 	const data = getTriggerUnitData(objTriggerUnit);
 
-	const objResponseUnit = objResponse.response_unit ? await storage.readUnit(objResponse.response_unit) : null;
+	const objResponseUnit = objResponse.response_unit ? await getJointFromStorageOrHub(objResponse.response_unit) : null;
 	const depositAaAddress = objResponse.aa_address;
 	const depositsAa = assocDepositsAas[depositAaAddress]
 	const curveAaAddress = depositsAa.curveAaAddress;
@@ -88,17 +86,28 @@ async function treatResponseFromDepositsAA(objResponse){
 		return announcements.announceNewDeposit(curveAa, depositsAa, vars[deposit_id].amount, vars[deposit_id].stable_amount, vars[deposit_id].owner, objResponse.trigger_unit);
 	} 
 
-	const stable_token_to_aa_amount = getAmountToAa(objTriggerUnit, depositAaAddress, depositsAa.asset) - getAmountFromAa(objResponseUnit, depositAaAddress, depositsAa.asset)
+	var stable_amount_to_aa = getAmountToAa(objTriggerUnit, depositAaAddress, depositsAa.asset) - getAmountFromAa(objResponseUnit, depositAaAddress, depositsAa.asset)
+	const interest_amount_from_aa = getAmountFromAa(objResponseUnit, depositAaAddress, curveAa.asset2);
 
-	if (stable_token_to_aa_amount > 0 && data.id){
-		const vars = getStateVarsForPrefix(depositAaAddress, 'deposit_' + data.id + '_force_close');
-		if (vars[ 'deposit_' + data.id + '_force_close'])
-			return announceForceClosePending(curveAa, depositsAa, objResponse.trigger_address, data.id,  
-			stable_token_to_aa_amount, objResponse.trigger_unit)
+	if (stable_amount_to_aa > 0 && data.id){
+		if (interest_amount_from_aa > 0){
+			const vars = getStateVarsForPrefix(depositAaAddress, 'deposit_' + data.id + '_force_close');
+			if (vars[ 'deposit_' + data.id + '_force_close'])
+				return announceForceClosePending(curveAa, depositsAa, objResponse.trigger_address, data.id,  
+					stable_amount_to_aa, objResponse.trigger_unit);
 
-		const interest_token_from_aa_amount = getAmountFromAa(objResponseUnit, depositAaAddress, curveAa.asset2)
+			return announcements.announceClosingDeposit(curveAa, depositsAa, objResponse.trigger_address, data.id,  
+				stable_amount_to_aa, interest_amount_from_aa, objResponse.trigger_unit);
+		}
+	}
+
+	if (data.commit_force_close && data.id){
+		const depositTriggerUnit = await storage.readUnit(data.id);
+		if (!depositTriggerUnit)
+			throw Error('trigger unit not found ' + data.id);
+		stable_amount_to_aa = getAmountFromAa(depositTriggerUnit, depositAaAddress, stable_asset);
 		return announcements.announceClosingDeposit(curveAa, depositsAa, objResponse.trigger_address, data.id,  
-		stable_token_to_aa_amount, interest_token_from_aa_amount, objResponse.trigger_unit);
+			stable_amount_to_aa, interest_amount_from_aa, objResponse.trigger_unit);
 	}
 	
 }
@@ -107,16 +116,15 @@ async function treatResponseFromCurveAA(objResponse){
 	const objTriggerUnit = await storage.readUnit(objResponse.trigger_unit);
 	if (!objTriggerUnit)
 		throw Error('trigger unit not found ' + objResponse.trigger_unit);
-	const objResponseUnit = objResponse.response_unit ? await storage.readUnit(objResponse.response_unit) : null;
+	const objResponseUnit = objResponse.response_unit ? await getJointFromStorageOrHub(objResponse.response_unit) : null;
 	const data = getTriggerUnitData(objTriggerUnit);
-//	const amount = getByteAmountToAA(objTriggerUnit, objResponse.aa_address);
 	const curveAa = assocCurveAas[objResponse.aa_address];
 	const curveAaAddress = objResponse.aa_address;
 	if (data.move_capacity && objResponse.response.amount)
-		return announcements.announceMovedCapacity(curveAa, objResponse.trigger_address, objResponse.response.amount);
+		return announcements.announceMovedCapacity(curveAa, objResponse.trigger_address, objResponse.response.amount, objResponse.trigger_unit);
 	if (objResponse.trigger_address == curveAa.governance_aa && data.name){
 		announcements.announceParameterChange(curveAa, data.name, data.value);
-		return;// saveAllCurveAaParams(objAa.address); // refresh with new param
+		return;
 	}
 	if (objResponse.trigger_address == curveAa.governance_aa && data.grant && data.recipient && data.amount)
 		return announcements.announceGrantAttributed(curveAa, data.grant, data.recipient, data.amount);
@@ -202,45 +210,48 @@ function getTriggerUnitData(objTriggerUnit){
 
 
 async function start(){
+	await lookForExistingStablecoins()
 
 	network.addLightWatchedAa(conf.curve_base_aa, null, err => {
 		if (err)
 			throw Error(err);
 	});
-	lookForExistingStablecoins()
-
 	setInterval(lightWallet.refreshLightClientHistory, 60*1000);
+	setInterval(lookForExistingStablecoins, 24*3600*1000); // everyday check new symbols
 }
 
-function lookForExistingStablecoins(){
-	discoverCurveAas();
-	discoverDepositAas();
+async function lookForExistingStablecoins(){
+	await discoverCurveAas();
+	await discoverDepositAas();
 }
 
 
-async function discoverDepositAas(){
-	network.requestFromLightVendor('light/get_aas_by_base_aas', {
-		base_aa: conf.deposit_base_aa
-	}, function(ws, request, arrResponse){
-		console.log(arrResponse);
-
-		Promise.all(arrResponse.map(watchDepositsAa))
+function discoverDepositAas(){
+	return new Promise(function(resolve){
+		network.requestFromLightVendor('light/get_aas_by_base_aas', {
+			base_aa: conf.deposit_base_aa
+		}, async function(ws, request, arrResponse){
+			await Promise.all(arrResponse.map(indexAndWatchDepositsAa));
+			resolve();
+		});
 	});
 }
 
-async function watchDepositsAa(objAa){
-	walletGeneral.addWatchedAddress(objAa.address, () => {
-		saveAllDepositsParams(objAa);
+function indexAndWatchDepositsAa(objAa){
+	return new Promise(async function(resolve){
+		await indexAllDepositsParams(objAa);
+		walletGeneral.addWatchedAddress(objAa.address, resolve);
 	});
 }
 
-async function watchCurveAa(objAa){
-	walletGeneral.addWatchedAddress(objAa.address, () => {
-		saveAllCurveAaParams(objAa);
+async function indexAndWatchCurveAa(objAa){
+	return new Promise(async function(resolve){
+		await indexAllCurveAaParams(objAa);
+		walletGeneral.addWatchedAddress(objAa.address, resolve);
 	});
 }
 
-async function saveAllDepositsParams(objAa){
+async function indexAllDepositsParams(objAa){
 	const depositsAaAddress = objAa.address;
 	const curveAaAddress = objAa.definition[1].params.curve_aa;
 
@@ -258,31 +269,33 @@ async function saveAllDepositsParams(objAa){
 		curveAaAddress
 	}
 	assocDepositsAasByCurves[curveAaAddress] = assocDepositsAas[depositsAaAddress];
-	console.log(assocDepositsAasByCurves[curveAaAddress]);
 }
 
 
-async function discoverCurveAas(){
-	network.requestFromLightVendor('light/get_aas_by_base_aas', {
-		base_aa: conf.curve_base_aa
-	}, function(ws, request, arrResponse){
-		console.log(arrResponse);
-		Promise.all(arrResponse.map(watchCurveAa))
+function discoverCurveAas(){
+	return new Promise(function(resolve){
+		network.requestFromLightVendor('light/get_aas_by_base_aas', {
+			base_aa: conf.curve_base_aa
+		}, async function(ws, request, arrResponse){
+			await Promise.all(arrResponse.map(indexAndWatchCurveAa));
+			resolve();
+		});
 	});
 }
 
 
 
-async function watchGovernanceAa(governanceAaAddress, curveAaAddress){
-	walletGeneral.addWatchedAddress(governanceAaAddress, () => {
-			assocGovernanceAas[governanceAaAddress] = {
-				asset: assocCurveAas[curveAaAddress].asset1,
-				curveAaAddress
-			}
+async function indexAndWatchGovernanceAa(governanceAaAddress, curveAaAddress){
+	return new Promise(function(resolve){
+		assocGovernanceAas[governanceAaAddress] = {
+			asset: assocCurveAas[curveAaAddress].asset1,
+			curveAaAddress
+		}
+		walletGeneral.addWatchedAddress(governanceAaAddress, resolve);
 	});
 }
 
-async function saveAllCurveAaParams(objAa){
+async function indexAllCurveAaParams(objAa){
 	const curveAaAddress = objAa.address;
 	const reserve_asset = objAa.definition[1].params.reserve_asset;
 
@@ -310,8 +323,7 @@ async function saveAllCurveAaParams(objAa){
 		reserve_asset_symbol: reserve_asset == 'base' ? 'GB' : registryVars['a2s_' + reserve_asset],
 		leverage: objAa.definition[1].params.leverage || 0
 	}
-	watchGovernanceAa(curveAaVars.governance_aa, curveAaAddress);
-	console.log(assocCurveAas[curveAaAddress]);
+	await indexAndWatchGovernanceAa(curveAaVars.governance_aa, curveAaAddress);
 }
 
 function handleJustsaying(ws, subject, body) {
@@ -332,11 +344,11 @@ function onAADefinition(objUnit){
 		if (message.app === 'definition' && payload.definition[1].base_aa){
 				const base_aa = payload.definition[1].base_aa;
 				if (base_aa == conf.deposit_base_aa)
-					watchDepositsAa({ address: objectHash.getChash160(payload.definition), definition: payload.definition });
+					indexAndWatchDepositsAa({ address: objectHash.getChash160(payload.definition), definition: payload.definition });
 				if (base_aa == conf.curve_base_aa){
 					const address = objectHash.getChash160(payload.definition);
 					const definition = payload.definition;
-					watchCurveAa({ address, definition });
+					indexAndWatchCurveAa({ address, definition });
 					announcements.announceNewCurve(address, definition);
 				}
 		}
@@ -408,4 +420,24 @@ function getStateVars(aa_address){
 		});
 	});
 }
+
+function getJointFromStorageOrHub(unit){
+	return new Promise(async (resolve) => {
+
+		var joint = await storage.readUnit(unit);
+		if (joint)
+			return resolve(joint);
+		const network = require('ocore/network.js');
+		network.requestFromLightVendor('get_joint', unit,  function(ws, request, response){
+			if (response.joint){
+				resolve(response.joint.unit)
+			} else {
+				resolve();
+			}
+		});
+	});
+}
+
+
+
 process.on('unhandledRejection', up => { throw up });
