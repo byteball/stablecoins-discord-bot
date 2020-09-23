@@ -3,9 +3,7 @@
 	"version": "0.1.0",
 	"dependencies": {
 		"discord.js": "^12.2.0",
-		"moment": "^2.24.0",
 		"ocore": "git+https://github.com/byteball/ocore.git",
 		"dotenv": "^8.2.0"
-
 	}
 }

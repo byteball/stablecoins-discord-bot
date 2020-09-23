@@ -1,5 +1,4 @@
 const Discord = require('discord.js');
-const moment = require('moment');
 const conf = require('ocore/conf.js');
 
 var discordClient = null;
@@ -35,6 +34,8 @@ function setBotActivity(){
 function sendToDiscord(to_be_sent){
 	if (!discordClient)
 		return console.log("discord client not initialized");
+	if (process.env.mute)
+		return console.log("discord client muted");
 	conf.discord_channels.forEach(function(channelId){
 			discordClient.channels.fetch(channelId).then(function(channel){
 				channel.send(to_be_sent);
