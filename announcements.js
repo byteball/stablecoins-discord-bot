@@ -44,7 +44,7 @@ function sendToDiscord(to_be_sent){
 }
 
 function getCurveName(curveAa){
-	return curveAa.aa_address + (curveAa.asset2_symbol ? (' - ' + curveAa.asset2_symbol) : '') + ' - ' + curveAa.interest_rate + '%';
+	return curveAa.aa_address + (curveAa.asset2_symbol ? (' - ' + curveAa.asset2_symbol) : '') + ' - ' + (curveAa.interest_rate * 100) + '%';
 }
 
 function applyDecimals(amount, decimals){
