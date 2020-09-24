@@ -38,6 +38,8 @@ function setBotActivity(){
 function sendToDiscord(to_be_sent){
 	if (!discordClient)
 		return console.log("discord client not initialized");
+	if (process.env.mute)
+		return console.log("client muted");
 	conf.discord_channels.forEach(function(channelId){
 			discordClient.channels.fetch(channelId).then(function(channel){
 				channel.send(to_be_sent);
@@ -216,15 +218,11 @@ function announceRemovedSupport(curveAa, trigger_address, param, leader, leader_
 		{ name: "Support", value: applyDecimals(leader_support, curveAa.asset1_decimals) + ' ' + (curveAa.asset1_symbol || defaultToken1Symbol), inline: true },
 	)
 	.addFields({name: 'Trigger unit', value: '[' + trigger_unit + ']('+conf.explorer_base_url + trigger_unit+')'});
-
 	
 	sendToDiscord(objEmbed);
 }
 
 
-function log(n, base) {
-	return Math.log(n) / Math.log(base);
-}
 
 exports.announceAddedSupport = announceAddedSupport;
 exports.announceNewDeposit = announceNewDeposit;
