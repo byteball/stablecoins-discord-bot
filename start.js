@@ -18,7 +18,7 @@ var assocGovernanceAas = {};
 
 lightWallet.setLightVendorHost(conf.hub);
 
-eventBus.on('connected', function(ws){
+eventBus.once('connected', function(ws){
 	network.initWitnessesIfNecessary(ws, start);
 });
 
@@ -211,12 +211,10 @@ function getTriggerUnitData(objTriggerUnit){
 
 async function start(){
 	await lookForExistingStablecoins()
-
-	network.addLightWatchedAa(conf.curve_base_aa, null, err => {
-		if (err)
-			throw Error(err);
+	eventBus.on('connected', function(ws){
+		network.addLightWatchedAa(conf.curve_base_aa, null, console.log);
 	});
-	setInterval(lightWallet.refreshLightClientHistory, 60*1000);
+	lightWallet.refreshLightClientHistory();
 	setInterval(lookForExistingStablecoins, 24*3600*1000); // everyday check new symbols
 }
 
