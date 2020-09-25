@@ -328,7 +328,11 @@ function handleJustsaying(ws, subject, body) {
 	switch (subject) {
 		case 'light/aa_definition':
 			onAADefinition(body);
-		break;
+			break;
+
+		case 'light/have_updates':
+			lightWallet.refreshLightClientHistory();
+			break;
 	}
 }
 
