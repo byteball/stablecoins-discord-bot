@@ -30,7 +30,7 @@ function getValueKey(value){
 
 async function treatResponseFromGovernanceAA(objResponse){
 
-	const objTriggerUnit = await storage.readUnit(objResponse.trigger_unit);
+	const objTriggerUnit = await getJointFromStorageOrHub(objResponse.trigger_unit);
 	if (!objTriggerUnit)
 		throw Error('trigger unit not found ' + objResponse.trigger_unit);
 	const data = getTriggerUnitData(objTriggerUnit);
@@ -68,7 +68,7 @@ async function treatResponseFromGovernanceAA(objResponse){
 
 async function treatResponseFromDepositsAA(objResponse){
 
-	const objTriggerUnit = await storage.readUnit(objResponse.trigger_unit);
+	const objTriggerUnit = await getJointFromStorageOrHub(objResponse.trigger_unit);
 	if (!objTriggerUnit)
 		throw Error('trigger unit not found ' + objResponse.trigger_unit);
 	const data = getTriggerUnitData(objTriggerUnit);
@@ -102,7 +102,7 @@ async function treatResponseFromDepositsAA(objResponse){
 	}
 
 	if (data.commit_force_close && data.id){
-		const depositTriggerUnit = await storage.readUnit(data.id);
+		const depositTriggerUnit = await getJointFromStorageOrHub(data.id);
 		if (!depositTriggerUnit)
 			throw Error('trigger unit not found ' + data.id);
 		stable_amount_to_aa = getAmountFromAa(depositTriggerUnit, depositAaAddress, depositsAa.asset); // the amount to AA is the same as the amount that was initially minted
@@ -113,7 +113,7 @@ async function treatResponseFromDepositsAA(objResponse){
 }
 
 async function treatResponseFromCurveAA(objResponse){
-	const objTriggerUnit = await storage.readUnit(objResponse.trigger_unit);
+	const objTriggerUnit = await getJointFromStorageOrHub(objResponse.trigger_unit);
 	if (!objTriggerUnit)
 		throw Error('trigger unit not found ' + objResponse.trigger_unit);
 	const objResponseUnit = objResponse.response_unit ? await getJointFromStorageOrHub(objResponse.response_unit) : null;
