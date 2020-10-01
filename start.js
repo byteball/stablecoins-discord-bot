@@ -105,7 +105,7 @@ async function treatResponseFromDepositsAA(objResponse){
 		const depositTriggerUnit = await storage.readUnit(data.id);
 		if (!depositTriggerUnit)
 			throw Error('trigger unit not found ' + data.id);
-		stable_amount_to_aa = getAmountFromAa(depositTriggerUnit, depositAaAddress, stable_asset);
+		stable_amount_to_aa = getAmountFromAa(depositTriggerUnit, depositAaAddress, depositsAa.asset); // the amount to AA is the same as the amount that was initially minted
 		return announcements.announceClosingDeposit(curveAa, depositsAa, objResponse.trigger_address, data.id,  
 			stable_amount_to_aa, interest_amount_from_aa, objResponse.trigger_unit);
 	}
@@ -133,7 +133,7 @@ async function treatResponseFromCurveAA(objResponse){
 		const asset1_added = getAmountFromAa(objResponseUnit, curveAaAddress, curveAa.asset1) - getAmountToAa(objTriggerUnit, curveAaAddress, curveAa.asset1); // can be negative
 		const asset2_added = getAmountFromAa(objResponseUnit, curveAaAddress, curveAa.asset2) - getAmountToAa(objTriggerUnit, curveAaAddress, curveAa.asset2); // can be negative
 
-		return announcements.announceSupplyChange(curveAa, reserve_added, asset1_added, asset2_added, objResponse.response.responseVars.p2, objResponse.response.responseVars.target_p2, objResponse.trigger_unit)
+	//	return announcements.announceSupplyChange(curveAa, reserve_added, asset1_added, asset2_added, objResponse.response.responseVars.p2, objResponse.response.responseVars.target_p2, objResponse.trigger_unit)
 	}
 
 }
