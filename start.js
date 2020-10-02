@@ -93,7 +93,7 @@ async function treatResponseFromDepositsAA(objResponse){
 		if (interest_amount_from_aa > 0){
 			const vars = getStateVarsForPrefix(depositAaAddress, 'deposit_' + data.id + '_force_close');
 			if (vars[ 'deposit_' + data.id + '_force_close'])
-				return announceForceClosePending(curveAa, depositsAa, objResponse.trigger_address, data.id,  
+				return announcements.announceForceClosePending(curveAa, depositsAa, objResponse.trigger_address, data.id,  
 					stable_amount_to_aa, objResponse.trigger_unit);
 
 			return announcements.announceClosingDeposit(curveAa, depositsAa, objResponse.trigger_address, data.id,  
@@ -102,10 +102,13 @@ async function treatResponseFromDepositsAA(objResponse){
 	}
 
 	if (data.commit_force_close && data.id){
-		const depositTriggerUnit = await getJointFromStorageOrHub(data.id);
-		if (!depositTriggerUnit)
-			throw Error('trigger unit not found ' + data.id);
-		stable_amount_to_aa = getAmountFromAa(depositTriggerUnit, depositAaAddress, depositsAa.asset); // the amount to AA is the same as the amount that was initially minted
+		const rows = await db.query("SELECT response_unit FROM aa_responses WHERE trigger_unit=? AND aa_address=?", [data.id, depositAaAddress])
+		if (!rows[0])
+			return console.log("deposit response unit not found")
+		const depositResponseUnit = await await getJointFromStorageOrHub(rows[0].response_unit);
+		if (!depositResponseUnit)
+			throw Error('response unit not found ' + data.id);
+		stable_amount_to_aa = getAmountFromAa(depositResponseUnit, depositAaAddress, depositsAa.asset); // the amount to AA is the same as the amount that was initially minted
 		return announcements.announceClosingDeposit(curveAa, depositsAa, objResponse.trigger_address, data.id,  
 			stable_amount_to_aa, interest_amount_from_aa, objResponse.trigger_unit);
 	}
