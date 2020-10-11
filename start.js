@@ -7,6 +7,7 @@ const walletGeneral = require('ocore/wallet_general.js');
 const objectHash = require('ocore/object_hash.js');
 const announcements = require('./announcements.js');
 const crypto = require('crypto');
+const db = require('ocore/db.js');
 
 var assocCurveAas = {};
 
