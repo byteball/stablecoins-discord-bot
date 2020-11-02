@@ -106,11 +106,12 @@ async function treatResponseFromDepositsAA(objResponse){
 		const rows = await db.query("SELECT response_unit FROM aa_responses WHERE trigger_unit=? AND aa_address=?", [data.id, depositAaAddress])
 		if (!rows[0])
 			return console.log("deposit response unit not found")
-		const depositResponseUnit = await await getJointFromStorageOrHub(rows[0].response_unit);
-		if (!depositResponseUnit)
+		const objDepositResponseUnit = await getJointFromStorageOrHub(rows[0].response_unit);
+		if (!objDepositResponseUnit)
 			throw Error('response unit not found ' + data.id);
-		stable_amount_to_aa = getAmountFromAa(depositResponseUnit, depositAaAddress, depositsAa.asset); // the amount to AA is the same as the amount that was initially minted
-		return announcements.announceClosingDeposit(curveAa, depositsAa, objResponse.trigger_address, data.id,  
+		const objDepositTriggerUnit = await getJointFromStorageOrHub(objDepositResponseUnit.trigger_unit);
+		stable_amount_to_aa = getAmountFromAa(objDepositResponseUnit, depositAaAddress, depositsAa.asset); // the amount to AA is the same as the amount that was initially minted
+		return announcements.announceClosingDeposit(curveAa, depositsAa, objDepositTriggerUnit.trigger_address, data.id,  
 			stable_amount_to_aa, interest_amount_from_aa, objResponse.trigger_unit);
 	}
 	
