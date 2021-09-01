@@ -22,7 +22,9 @@ eventBus.once('connected', function(ws){
 async function start(){
 	await discoverGovernanceAas();
 	eventBus.on('connected', function(ws){
-		network.addLightWatchedAa(conf.governance_base_aa, null, console.log);
+		conf.governance_base_AAs_V1.concat(conf.governance_base_AAs_V2).forEach((address) => {
+			network.addLightWatchedAa(address, null, console.log);
+		});
 	});
 	lightWallet.refreshLightClientHistory();
 	setInterval(discoverGovernanceAas, 24*3600*1000); // everyday check
@@ -51,7 +53,7 @@ async function treatResponseFromGovernanceAA(objResponse){
 			registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_support_key]);
 			const leader_support = registryVars[leader_support_key];
 			return announcements.announceRemovedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, data.name, leader, 
-			leader_support, objResponse.trigger_unit);
+			leader_support, objResponse.trigger_unit, governanceAA.version);
 		}
 		const support_key = 'support_' + data.name + '_' + getValueKey(data.value);
 		const leader_key = 'leader_' + data.name;
@@ -63,15 +65,14 @@ async function treatResponseFromGovernanceAA(objResponse){
 		registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_support_key]);
 		const leader_support = registryVars[leader_support_key];
 
-		const amountToAa = getAmountToAa(objTriggerUnit, governanceAAAddress, governanceAA.asset);
+		const amountToAa = getAmountToAa(objTriggerUnit, governanceAAAddress, (governanceAA.version === 1 ? assocCurveAAs[governanceAA.curveAAAddress].asset1 : assocCurveAAs[governanceAA.curveAAAddress].fund_asset));
 
-		return announcements.announceAddedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, amountToAa, data.name,data.value,
-			support, leader, leader_support, objResponse.trigger_unit);
+		return announcements.announceAddedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, amountToAa, data.name, data.value,
+			support, leader, leader_support, objResponse.trigger_unit, governanceAA.version);
 	}
 }
 
 eventBus.on('aa_response', function(objResponse){
-	console.log('---------------------------------------------- aa_response ');
 	if(objResponse.response.error)
 		return console.log('ignored response with error: ' + objResponse.response.error);
 	if (assocGovernanceAAs[objResponse.aa_address]){
@@ -80,36 +81,45 @@ eventBus.on('aa_response', function(objResponse){
 });
 
 async function discoverGovernanceAas(){
-	const rows = await DAG.getAAsByBaseAAs([conf.governance_base_aa]);
+	const rows = await DAG.getAAsByBaseAAs(conf.governance_base_AAs_V1.concat(conf.governance_base_AAs_V2));
 	await Promise.all(rows.map(indexAndWatchGovernanceAA));
 }
 
 async function indexAndWatchGovernanceAA(governanceAA){
 	return new Promise(async function(resolve){
 		const curveAAAddress = governanceAA.definition[1].params.curve_aa;
-		await indexAllCurveAaParams(curveAAAddress);
+		const version = (conf.governance_base_AAs_V1.includes(governanceAA.definition[1].base_aa) ? 1 : 2);
 
 		assocGovernanceAAs[governanceAA.address] = {
-			curveAAAddress: curveAAAddress
+			curveAAAddress: curveAAAddress,
+			version: version
 		}
+
+		await indexAllCurveAaParams(curveAAAddress);
+
 		walletGeneral.addWatchedAddress(governanceAA.address, resolve);
-		console.log('stablecoinds-discord-bot: added governance AA', assocGovernanceAAs[governanceAA.address]);
 	});
 }
 
 async function indexAllCurveAaParams(curveAAAddress){
 	const curveAADefinition = await DAG.readAADefinition(curveAAAddress);
 	const reserve_asset = curveAADefinition[1].params.reserve_asset;
-
 	const curveAAVars = await DAG.readAAStateVars(curveAAAddress);
-	var registryVars = await getStateVarsForPrefixes(conf.token_registry_aa_address, [
+
+	let fundAsset;
+	if (assocGovernanceAAs[curveAAVars.governance_aa].version === 2)
+		fundAsset = await DAG.readAAStateVar(curveAAVars.fund_aa, "shares_asset");
+
+	var registryVars = await getStateVarsForPrefixes(conf.token_registry_AA_address, [
 		'a2s_' + curveAAVars.asset1, 
 		'a2s_' + curveAAVars.asset2, 
 		'a2s_' + reserve_asset, 
+		'a2s_' + fundAsset,
 		'current_desc_' + reserve_asset
 	]);
 	const current_desc = registryVars['current_desc_' + reserve_asset];
-	registryVars = Object.assign(registryVars, await getStateVarsForPrefixes(conf.token_registry_aa_address, ['decimals_' + current_desc]));
+	registryVars = Object.assign(registryVars, await getStateVarsForPrefixes(conf.token_registry_AA_address, ['decimals_' + current_desc]));
+
 	assocCurveAAs[curveAAAddress] = {
 		aa_address: curveAAAddress,
 		governance_aa: curveAAVars.governance_aa,
@@ -125,7 +135,10 @@ async function indexAllCurveAaParams(curveAAAddress){
 		reserve_asset_symbol: reserve_asset == 'base' ? 'GB' : registryVars['a2s_' + reserve_asset],
 		leverage: curveAADefinition[1].params.leverage || 0
 	}
-	console.log('stablecoinds-discord-bot: added curve AA', assocCurveAAs[curveAAAddress]);
+	if (fundAsset) {
+		assocCurveAAs[curveAAAddress].fund_asset = fundAsset;
+		assocCurveAAs[curveAAAddress].fund_asset_symbol = registryVars['a2s_' + fundAsset];
+	}		
 }
 
 function getStateVarsForPrefixes(aa_address, arrPrefixes){
