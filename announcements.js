@@ -31,7 +31,7 @@ async function initDiscord(){
 }
 
 function setBotActivity(){
-	discordClient.user.setActivity(conf.curve_base_aa , {type: "WATCHING"}); 
+	discordClient.user.setActivity(conf.governance_base_aa , {type: "WATCHING"}); 
 }
 
 
