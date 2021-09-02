@@ -61,13 +61,13 @@ async function treatResponseFromGovernanceAA(objResponse){
 
 		const support = registryVars[support_key];
 		const leader = registryVars[leader_key];
-		const leader_support_key = 'leader_' + leader;
-		registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_support_key]);
+		const leader_support_key = 'support_' + data.name + '_' + leader;
+		const balance_key = 'balance_' + objTriggerUnit.authors[0].address;
+		registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_support_key, balance_key]);
 		const leader_support = registryVars[leader_support_key];
+		const added_amount = registryVars[balance_key];
 
-		const amountToAa = getAmountToAa(objTriggerUnit, governanceAAAddress, (governanceAA.version === 1 ? assocCurveAAs[governanceAA.curveAAAddress].asset1 : assocCurveAAs[governanceAA.curveAAAddress].fund_asset));
-
-		return announcements.announceAddedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, amountToAa, data.name, data.value,
+		return announcements.announceAddedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, added_amount, data.name, data.value,
 			support, leader, leader_support, objResponse.trigger_unit, governanceAA.version);
 	}
 }
@@ -75,6 +75,8 @@ async function treatResponseFromGovernanceAA(objResponse){
 eventBus.on('aa_response', function(objResponse){
 	if(objResponse.response.error)
 		return console.log('ignored response with error: ' + objResponse.response.error);
+	if ((Math.ceil(Date.now() / 1000) - objResponse.timestamp) / 60 / 60 > 24)
+		return console.log('ignored old response' + objResponse);
 	if (assocGovernanceAAs[objResponse.aa_address]){
 		treatResponseFromGovernanceAA(objResponse);
 	}
@@ -90,12 +92,11 @@ async function indexAndWatchGovernanceAA(governanceAA){
 		const curveAAAddress = governanceAA.definition[1].params.curve_aa;
 		const version = (conf.governance_base_AAs_V1.includes(governanceAA.definition[1].base_aa) ? 1 : 2);
 
+		await indexAllCurveAaParams(curveAAAddress);
 		assocGovernanceAAs[governanceAA.address] = {
 			curveAAAddress: curveAAAddress,
 			version: version
 		}
-
-		await indexAllCurveAaParams(curveAAAddress);
 
 		walletGeneral.addWatchedAddress(governanceAA.address, resolve);
 	});
@@ -107,7 +108,7 @@ async function indexAllCurveAaParams(curveAAAddress){
 	const curveAAVars = await DAG.readAAStateVars(curveAAAddress);
 
 	let fundAsset;
-	if (assocGovernanceAAs[curveAAVars.governance_aa].version === 2)
+	if (curveAAVars.fund_aa)
 		fundAsset = await DAG.readAAStateVar(curveAAVars.fund_aa, "shares_asset");
 
 	var registryVars = await getStateVarsForPrefixes(conf.token_registry_AA_address, [
@@ -151,25 +152,6 @@ function getStateVarsForPrefixes(aa_address, arrPrefixes){
 			return resolve({});
 		});
 	});
-}
-
-function getAmountToAa(objTriggerUnit, aa_address, asset = 'base'){
-	if (!objTriggerUnit)
-		return 0;
-	let amount = 0;
-	objTriggerUnit.messages.forEach(function (message){
-		if (message.app !== 'payment')
-			return;
-		const payload = message.payload;
-		if (asset == 'base' && payload.asset || asset != 'base' && asset !== payload.asset)
-			return;
-		payload.outputs.forEach(function (output){
-			if (output.address === aa_address) {
-				amount += output.amount; // in case there are several outputs
-			}
-		});
-	});
-	return amount;
 }
 
 function getTriggerUnitData(objTriggerUnit){
