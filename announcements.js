@@ -94,5 +94,33 @@ function announceRemovedSupport(curveAa, trigger_address, param, leader, leader_
 	sendToDiscord(objEmbed);
 }
 
+function announceCommitedValue(curveAa, trigger_address, param, value, trigger_unit) {
+	const objEmbed = new Discord.MessageEmbed()
+	.setColor('#0099ff')
+	.setTitle('New parameter value commited for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa) + trigger_address +' commited value `' + value +'` for parameter `'+param +'`')
+	.addFields(
+		{ name: "Parameter", value: param, inline: true },
+		{ name: "Value", value: value, inline: true},
+		{ name: '\u200B', value: '\u200B' , inline: true 	}
+	).addFields({name: 'Trigger unit', value: '[' + trigger_unit + ']('+conf.explorer_base_url + trigger_unit+')'});
+	
+	sendToDiscord(objEmbed);
+}
+
+function announceWithdrawn(curveAa, trigger_address, amount, trigger_unit, version) {
+	const decimals = (version === 1 ? curveAa.asset1_decimals : curveAa.reserve_asset_decimals);
+	const symbol = (version === 1 ? curveAa.asset1_symbol : curveAa.fund_asset_symbol);
+	const objEmbed = new Discord.MessageEmbed()
+	.setColor('#0099ff')
+	.setTitle('Balance withdrawn from ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa) + trigger_address +' has withdrawn `' + applyDecimals(amount, decimals) + ' ' + (symbol || defaultToken1Symbol) +'` from their balance')
+	.addFields({name: 'Trigger unit', value: '[' + trigger_unit + ']('+conf.explorer_base_url + trigger_unit+')'});
+	
+	sendToDiscord(objEmbed);
+}
+
 exports.announceAddedSupport = announceAddedSupport;
 exports.announceRemovedSupport = announceRemovedSupport;
+exports.announceCommitedValue = announceCommitedValue;
+exports.announceWithdrawn = announceWithdrawn;

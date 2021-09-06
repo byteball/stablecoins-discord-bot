@@ -45,6 +45,17 @@ async function treatResponseFromGovernanceAA(objResponse){
 	const governanceAAAddress = objResponse.aa_address;
 	const governanceAA = assocGovernanceAAs[governanceAAAddress];
 	if (data.name){
+		if (data.commit) {
+			var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [data.name]);
+			var value = registryVars[data.name];
+			return announcements.announceCommitedValue(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, data.name, value, objResponse.trigger_unit);
+		}
+		if (data.withdraw) {
+			const balance_key = 'balance_' + objResponse.trigger_address;
+			var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [balance_key]);
+			var amount = data.amount || registryVars[balance_key];
+			return announcements.announceWithdrawn(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, amount, objResponse.trigger_unit, governanceAA.version);
+		}
 		if (data.value === undefined){
 			const leader_key = 'leader_' + data.name;
 			var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_key]);
@@ -62,7 +73,7 @@ async function treatResponseFromGovernanceAA(objResponse){
 		const support = registryVars[support_key];
 		const leader = registryVars[leader_key];
 		const leader_support_key = 'support_' + data.name + '_' + leader;
-		const balance_key = 'balance_' + objTriggerUnit.authors[0].address;
+		const balance_key = 'balance_' + objResponse.trigger_address;
 		registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_support_key, balance_key]);
 		const leader_support = registryVars[leader_support_key];
 		const added_amount = registryVars[balance_key];
