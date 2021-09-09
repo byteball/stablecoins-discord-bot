@@ -114,7 +114,7 @@ function announceWithdrawn(curveAa, trigger_address, amount, trigger_unit, versi
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
 	.setTitle('Balance withdrawn from ' + getCurveName(curveAa))
-	.setDescription(linkToGui(curveAa) + trigger_address +' has withdrawn `' + applyDecimals(amount, decimals) + ' ' + (symbol || defaultToken1Symbol) +'` from their balance')
+	.setDescription(linkToGui(curveAa) + trigger_address +' has withdrawn ' + (amount ? '`' + applyDecimals(amount, decimals) + ' ' : '`') + (symbol || defaultToken1Symbol) +'` from their balance')
 	.addFields({name: 'Trigger unit', value: '[' + trigger_unit + ']('+conf.explorer_base_url + trigger_unit+')'});
 	
 	sendToDiscord(objEmbed);

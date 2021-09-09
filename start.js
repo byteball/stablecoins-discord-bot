@@ -50,17 +50,11 @@ async function treatResponseFromGovernanceAA(objResponse){
 			var value = registryVars[data.name];
 			return announcements.announceCommitedValue(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, data.name, value, objResponse.trigger_unit);
 		}
-		if (data.withdraw) {
-			const balance_key = 'balance_' + objResponse.trigger_address;
-			var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [balance_key]);
-			var amount = data.amount || registryVars[balance_key];
-			return announcements.announceWithdrawn(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, amount, objResponse.trigger_unit, governanceAA.version);
-		}
 		if (data.value === undefined){
 			const leader_key = 'leader_' + data.name;
 			var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_key]);
 			const leader = registryVars[leader_key];
-			const leader_support_key = 'leader_' + leader;
+			const leader_support_key = 'support_' + data.name + '_' + leader;
 			registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_support_key]);
 			const leader_support = registryVars[leader_support_key];
 			return announcements.announceRemovedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, data.name, leader, 
@@ -80,6 +74,10 @@ async function treatResponseFromGovernanceAA(objResponse){
 
 		return announcements.announceAddedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, added_amount, data.name, data.value,
 			support, leader, leader_support, objResponse.trigger_unit, governanceAA.version);
+	}
+	if (data.withdraw) {
+		var amount = data.amount;
+		return announcements.announceWithdrawn(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, amount, objResponse.trigger_unit, governanceAA.version);
 	}
 }
 
