@@ -94,11 +94,11 @@ function announceRemovedSupport(curveAa, trigger_address, param, leader, leader_
 	sendToDiscord(objEmbed);
 }
 
-function announceCommitedValue(curveAa, trigger_address, param, value, trigger_unit) {
+function announceCommittedValue(curveAa, trigger_address, param, value, trigger_unit) {
 	const objEmbed = new Discord.MessageEmbed()
 	.setColor('#0099ff')
-	.setTitle('New parameter value commited for ' + getCurveName(curveAa))
-	.setDescription(linkToGui(curveAa) + trigger_address +' commited value `' + value +'` for parameter `'+param +'`')
+	.setTitle('New parameter value committed for ' + getCurveName(curveAa))
+	.setDescription(linkToGui(curveAa) + trigger_address +' committed value `' + value +'` for parameter `'+param +'`')
 	.addFields(
 		{ name: "Parameter", value: param, inline: true },
 		{ name: "Value", value: value, inline: true},
@@ -122,5 +122,5 @@ function announceWithdrawn(curveAa, trigger_address, amount, trigger_unit, versi
 
 exports.announceAddedSupport = announceAddedSupport;
 exports.announceRemovedSupport = announceRemovedSupport;
-exports.announceCommitedValue = announceCommitedValue;
+exports.announceCommittedValue = announceCommittedValue;
 exports.announceWithdrawn = announceWithdrawn;

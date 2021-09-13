@@ -48,7 +48,7 @@ async function treatResponseFromGovernanceAA(objResponse){
 		if (data.commit) {
 			var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [data.name]);
 			var value = registryVars[data.name];
-			return announcements.announceCommitedValue(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, data.name, value, objResponse.trigger_unit);
+			return announcements.announceCommittedValue(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, data.name, value, objResponse.trigger_unit);
 		}
 		if (data.value === undefined){
 			const leader_key = 'leader_' + data.name;
@@ -76,7 +76,7 @@ async function treatResponseFromGovernanceAA(objResponse){
 			support, leader, leader_support, objResponse.trigger_unit, governanceAA.version);
 	}
 	if (data.withdraw) {
-		var amount = data.amount;
+		var amount = getAmountFromUnit(objResponse.objResponseUnit, objResponse.trigger_address, (governanceAA.version === 1 ? assocCurveAAs[governanceAA.curveAAAddress].asset1 : assocCurveAAs[governanceAA.curveAAAddress].fund_asset));
 		return announcements.announceWithdrawn(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, amount, objResponse.trigger_unit, governanceAA.version);
 	}
 }
@@ -168,6 +168,25 @@ function getTriggerUnitData(objTriggerUnit){
 	if (objTriggerUnit.messages[i].app === 'data') // AA considers only the first data message
 		return objTriggerUnit.messages[i].payload;
 	return {};
+}
+
+function getAmountFromUnit(objUnit, to_address, asset = 'base'){
+	if (!objUnit)
+		return 0;
+	let amount = 0;
+	objUnit.messages.forEach(function (message){
+		if (message.app !== 'payment')
+			return;
+		const payload = message.payload;
+		if (asset == 'base' && payload.asset || asset != 'base' && asset !== payload.asset)
+			return;
+		payload.outputs.forEach(function (output){
+			if (output.address === to_address) {
+				amount += output.amount; // in case there are several outputs
+			}
+		});
+	});
+	return amount;
 }
 
 function handleJustsaying(ws, subject, body) {
