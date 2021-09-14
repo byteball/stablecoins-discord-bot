@@ -5,6 +5,8 @@ require('dotenv').config({ path: path.dirname(process.mainModule.paths[0]) + '/.
 exports.bServeAsHub = false;
 exports.bLight = true;
 
+exports.bNoPassphrase = true;
+
 exports.discord_token = process.env.discord_token;
 exports.discord_channels = [process.env.channel];
 
