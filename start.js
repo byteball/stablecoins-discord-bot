@@ -19,8 +19,8 @@ eventBus.once('connected', function(ws){
 async function start(){
 	await discoverGovernanceAas();
 	eventBus.on('connected', function(ws){
-		conf.stablecoins_governance_base_AAs_V1
-		.concat(conf.stablecoins_governance_base_AAs_V2)
+		conf.governance_base_AAs_V1
+		.concat(conf.governance_base_AAs_V2)
 		.forEach((address) => {
 			network.addLightWatchedAa(address, null, console.log);
 		});
@@ -49,14 +49,14 @@ eventBus.on('aa_response', async function(objResponse){
 });
 
 async function discoverGovernanceAas(){
-	let rows = await DAG.getAAsByBaseAAs(conf.stablecoins_governance_base_AAs_V1.concat(conf.stablecoins_governance_base_AAs_V2));
-	await Promise.all(rows.map(indexAndWatchStablecoinsGovernanceAA));
+	let rows = await DAG.getAAsByBaseAAs(conf.governance_base_AAs_V1.concat(conf.governance_base_AAs_V2));
+	await Promise.all(rows.map(indexAndWatchGovernanceAA));
 }
 
-async function indexAndWatchStablecoinsGovernanceAA(governanceAA){
+async function indexAndWatchGovernanceAA(governanceAA){
 	return new Promise(async function(resolve){
 		const curveAAAddress = governanceAA.definition[1].params.curve_aa;
-		const version = (conf.stablecoins_governance_base_AAs_V1.includes(governanceAA.definition[1].base_aa) ? 1 : 2);
+		const version = (conf.governance_base_AAs_V1.includes(governanceAA.definition[1].base_aa) ? 1 : 2);
 
 		await indexAllCurveAaParams(curveAAAddress);
 		assocGovernanceAAs[governanceAA.address] = {
