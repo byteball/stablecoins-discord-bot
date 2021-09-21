@@ -5,7 +5,7 @@
 		"ocore": "git+https://github.com/byteball/ocore.git",
 		"dotenv": "^8.2.0",
 		"aabot": "git+https://github.com/byteball/aabot.git",
-		"governance_events": "git+https://github.com/kakysha/governance_events.git"
+		"governance_events": "git+https://github.com/byteball/governance_events.git"
 	},
 	"resolutions": {
 		"level-rocksdb": "^4.0.0"

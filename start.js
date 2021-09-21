@@ -7,7 +7,7 @@ const walletGeneral = require('ocore/wallet_general.js');
 const governanceEvents = require('governance_events/governance_events.js');
 const governanceDiscord = require('governance_events/governance_discord.js');
 
-var assocStablecoinsGovernanceAAs = {};
+var assocGovernanceAAs = {};
 var assocCurveAAs = {};
 
 lightWallet.setLightVendorHost(conf.hub);
@@ -34,8 +34,8 @@ eventBus.on('aa_response', async function(objResponse){
 		return console.log('ignored response with error: ' + objResponse.response.error);
 	if ((Math.ceil(Date.now() / 1000) - objResponse.timestamp) / 60 / 60 > 24)
 		return console.log('ignored old response' + objResponse);
-	if (assocStablecoinsGovernanceAAs[objResponse.aa_address]){
-		const governance_aa = assocStablecoinsGovernanceAAs[objResponse.aa_address];
+	if (assocGovernanceAAs[objResponse.aa_address]){
+		const governance_aa = assocGovernanceAAs[objResponse.aa_address];
 		const main_aa = assocCurveAAs[governance_aa.curveAAAddress];
 		const asset = governance_aa.version === 1 ? main_aa.asset1 : main_aa.fund_asset;
 		
@@ -59,7 +59,7 @@ async function indexAndWatchStablecoinsGovernanceAA(governanceAA){
 		const version = (conf.stablecoins_governance_base_AAs_V1.includes(governanceAA.definition[1].base_aa) ? 1 : 2);
 
 		await indexAllCurveAaParams(curveAAAddress);
-		assocStablecoinsGovernanceAAs[governanceAA.address] = {
+		assocGovernanceAAs[governanceAA.address] = {
 			curveAAAddress: curveAAAddress,
 			version: version
 		}
