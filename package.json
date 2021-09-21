@@ -2,10 +2,10 @@
 	"name": "stablecoins-discord-bot",
 	"version": "0.1.0",
 	"dependencies": {
-		"discord.js": "^12.2.0",
 		"ocore": "git+https://github.com/byteball/ocore.git",
 		"dotenv": "^8.2.0",
-		"aabot": "git+https://github.com/byteball/aabot.git"
+		"aabot": "git+https://github.com/byteball/aabot.git",
+		"governance_events": "git+https://github.com/kakysha/governance_events.git"
 	},
 	"resolutions": {
 		"level-rocksdb": "^4.0.0"

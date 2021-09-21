@@ -14,10 +14,10 @@ exports.hub = process.env.testnet ? 'obyte.org/bb-test' : 'obyte.org/bb';
 exports.explorer_base_url = process.env.testnet ? 'https://testnetexplorer.obyte.org/#' : 'https://explorer.obyte.org/#';
 exports.stablecoins_base_url = process.env.testnet ? 'https://testnet.ostable.org/trade/' : 'https://ostable.org/trade/';
 
-exports.governance_base_AAs_V1 = [
+exports.stablecoins_governance_base_AAs_V1 = [
 	'Y4VBXMROK5BWBKSYYAMUW7QUEZFXYBCF', 'UUPBIWDWQ7Q4WXS5CWSEKUQE34FG6L55'
 ];
-exports.governance_base_AAs_V2 = [
+exports.stablecoins_governance_base_AAs_V2 = [
 	'JL6OOEOQCJ2RJ3NHCUJLUBDR3ZE3GY3F', 'LXHUYEV6IHBCTGMFNSWRBBU7DGR3JTIY'
 ];
 exports.token_registry_AA_address = "O6H6ZIFI57X3PLTYHOCVYPP5A553CYFQ";

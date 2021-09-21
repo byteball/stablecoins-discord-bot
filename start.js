@@ -1,16 +1,13 @@
+const DAG = require('aabot/dag.js');
 const conf = require('ocore/conf.js');
 const network = require('ocore/network.js');
 const eventBus = require('ocore/event_bus.js');
 const lightWallet = require('ocore/light_wallet.js');
-const storage = require('ocore/storage.js');
 const walletGeneral = require('ocore/wallet_general.js');
-const objectHash = require('ocore/object_hash.js');
-const announcements = require('./announcements.js');
-const crypto = require('crypto');
-const db = require('ocore/db.js');
-const DAG = require('aabot/dag.js');
+const governanceEvents = require('governance_events/governance_events.js');
+const governanceDiscord = require('governance_events/governance_discord.js');
 
-var assocGovernanceAAs = {};
+var assocStablecoinsGovernanceAAs = {};
 var assocCurveAAs = {};
 
 lightWallet.setLightVendorHost(conf.hub);
@@ -22,7 +19,9 @@ eventBus.once('connected', function(ws){
 async function start(){
 	await discoverGovernanceAas();
 	eventBus.on('connected', function(ws){
-		conf.governance_base_AAs_V1.concat(conf.governance_base_AAs_V2).forEach((address) => {
+		conf.stablecoins_governance_base_AAs_V1
+		.concat(conf.stablecoins_governance_base_AAs_V2)
+		.forEach((address) => {
 			network.addLightWatchedAa(address, null, console.log);
 		});
 	});
@@ -30,79 +29,37 @@ async function start(){
 	setInterval(discoverGovernanceAas, 24*3600*1000); // everyday check
 }
 
-function getValueKey(value){
-	return ('support_' + 'oracles' +'_' + value+ '_'+ 32).length > 128 ? 
-	crypto.createHash("sha256").update(value, "utf8").digest("base64") : value;
-}
-
-async function treatResponseFromGovernanceAA(objResponse){
-	const objTriggerJoint = await DAG.readJoint(objResponse.trigger_unit);
-	if (!objTriggerJoint)
-		throw Error('trigger unit not found ' + objResponse.trigger_unit);
-	const objTriggerUnit = objTriggerJoint.unit;
-
-	const data = getTriggerUnitData(objTriggerUnit);
-	const governanceAAAddress = objResponse.aa_address;
-	const governanceAA = assocGovernanceAAs[governanceAAAddress];
-	if (data.name){
-		if (data.commit) {
-			var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [data.name]);
-			var value = registryVars[data.name];
-			return announcements.announceCommittedValue(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, data.name, value, objResponse.trigger_unit);
-		}
-		if (data.value === undefined){
-			const leader_key = 'leader_' + data.name;
-			var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_key]);
-			const leader = registryVars[leader_key];
-			const leader_support_key = 'support_' + data.name + '_' + leader;
-			registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_support_key]);
-			const leader_support = registryVars[leader_support_key];
-			return announcements.announceRemovedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, data.name, leader, 
-			leader_support, objResponse.trigger_unit, governanceAA.version);
-		}
-		const support_key = 'support_' + data.name + '_' + getValueKey(data.value);
-		const leader_key = 'leader_' + data.name;
-		var registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_key, support_key]);
-
-		const support = registryVars[support_key];
-		const leader = registryVars[leader_key];
-		const leader_support_key = 'support_' + data.name + '_' + leader;
-		const balance_key = 'balance_' + objResponse.trigger_address;
-		registryVars = await getStateVarsForPrefixes(governanceAAAddress, [leader_support_key, balance_key]);
-		const leader_support = registryVars[leader_support_key];
-		const added_amount = registryVars[balance_key];
-
-		return announcements.announceAddedSupport(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, added_amount, data.name, data.value,
-			support, leader, leader_support, objResponse.trigger_unit, governanceAA.version);
-	}
-	if (data.withdraw) {
-		var amount = getAmountFromUnit(objResponse.objResponseUnit, objResponse.trigger_address, (governanceAA.version === 1 ? assocCurveAAs[governanceAA.curveAAAddress].asset1 : assocCurveAAs[governanceAA.curveAAAddress].fund_asset));
-		return announcements.announceWithdrawn(assocCurveAAs[governanceAA.curveAAAddress], objResponse.trigger_address, amount, objResponse.trigger_unit, governanceAA.version);
-	}
-}
-
-eventBus.on('aa_response', function(objResponse){
+eventBus.on('aa_response', async function(objResponse){
 	if(objResponse.response.error)
 		return console.log('ignored response with error: ' + objResponse.response.error);
 	if ((Math.ceil(Date.now() / 1000) - objResponse.timestamp) / 60 / 60 > 24)
 		return console.log('ignored old response' + objResponse);
-	if (assocGovernanceAAs[objResponse.aa_address]){
-		treatResponseFromGovernanceAA(objResponse);
+	if (assocStablecoinsGovernanceAAs[objResponse.aa_address]){
+		const governance_aa = assocStablecoinsGovernanceAAs[objResponse.aa_address];
+		const main_aa = assocCurveAAs[governance_aa.curveAAAddress];
+		const asset = governance_aa.version === 1 ? main_aa.asset1 : main_aa.fund_asset;
+		
+		const event = await governanceEvents.treatResponseFromGovernanceAA(objResponse, asset);
+
+		const aa_name = main_aa.aa_address + (main_aa.asset2_symbol ? (' - ' + main_aa.asset2_symbol) : '') + ' - ' + main_aa.interest_rate * 100 + '%';
+		const symbol = governance_aa.version === 1 ? main_aa.asset1_symbol : main_aa.fund_asset_symbol;
+		const decimals = governance_aa.version === 1 ? main_aa.asset1_decimals : main_aa.reserve_asset_decimals;
+		governanceDiscord.announceEvent(aa_name, symbol, decimals, conf.stablecoins_base_url + main_aa.aa_address + '/governance', event);
 	}
 });
 
 async function discoverGovernanceAas(){
-	const rows = await DAG.getAAsByBaseAAs(conf.governance_base_AAs_V1.concat(conf.governance_base_AAs_V2));
-	await Promise.all(rows.map(indexAndWatchGovernanceAA));
+	let rows = await DAG.getAAsByBaseAAs(conf.stablecoins_governance_base_AAs_V1.concat(conf.stablecoins_governance_base_AAs_V2));
+	await Promise.all(rows.map(indexAndWatchStablecoinsGovernanceAA));
 }
 
-async function indexAndWatchGovernanceAA(governanceAA){
+async function indexAndWatchStablecoinsGovernanceAA(governanceAA){
 	return new Promise(async function(resolve){
 		const curveAAAddress = governanceAA.definition[1].params.curve_aa;
-		const version = (conf.governance_base_AAs_V1.includes(governanceAA.definition[1].base_aa) ? 1 : 2);
+		const version = (conf.stablecoins_governance_base_AAs_V1.includes(governanceAA.definition[1].base_aa) ? 1 : 2);
 
 		await indexAllCurveAaParams(curveAAAddress);
-		assocGovernanceAAs[governanceAA.address] = {
+		assocStablecoinsGovernanceAAs[governanceAA.address] = {
 			curveAAAddress: curveAAAddress,
 			version: version
 		}
@@ -115,20 +72,22 @@ async function indexAllCurveAaParams(curveAAAddress){
 	const curveAADefinition = await DAG.readAADefinition(curveAAAddress);
 	const reserve_asset = curveAADefinition[1].params.reserve_asset;
 	const curveAAVars = await DAG.readAAStateVars(curveAAAddress);
-
-	let fundAsset;
-	if (curveAAVars.fund_aa)
+	let fundAsset, fund_asset_symbol;
+	if (curveAAVars.fund_aa) {
 		fundAsset = await DAG.readAAStateVar(curveAAVars.fund_aa, "shares_asset");
-
-	var registryVars = await getStateVarsForPrefixes(conf.token_registry_AA_address, [
-		'a2s_' + curveAAVars.asset1, 
-		'a2s_' + curveAAVars.asset2, 
-		'a2s_' + reserve_asset, 
-		'a2s_' + fundAsset,
+		fund_asset_symbol = await DAG.readAAStateVar(conf.token_registry_AA_address, 'a2s_' + fundAsset);
+	}
+	const vars = await readStateVarsForPrefixes(conf.token_registry_AA_address, [
+		'a2s_' + curveAAVars.asset1,
+		'a2s_' + curveAAVars.asset2,
+		'a2s_' + reserve_asset,
 		'current_desc_' + reserve_asset
 	]);
-	const current_desc = registryVars['current_desc_' + reserve_asset];
-	registryVars = Object.assign(registryVars, await getStateVarsForPrefixes(conf.token_registry_AA_address, ['decimals_' + current_desc]));
+	const asset1_symbol = vars['a2s_' + curveAAVars.asset1];
+	const asset2_symbol = vars['a2s_' + curveAAVars.asset2];
+	const reserve_asset_symbol = vars['a2s_' + reserve_asset];
+	const current_desc = vars['current_desc_' + reserve_asset];
+	const reserve_asset_decimals = await DAG.readAAStateVar(conf.token_registry_AA_address, 'decimals_' + current_desc);
 
 	assocCurveAAs[curveAAAddress] = {
 		aa_address: curveAAAddress,
@@ -138,20 +97,20 @@ async function indexAllCurveAaParams(curveAAAddress){
 		interest_rate: curveAAVars.interest_rate,
 		asset1_decimals: curveAADefinition[1].params.decimals1,
 		asset2_decimals: curveAADefinition[1].params.decimals2,
-		asset1_symbol: registryVars['a2s_' + curveAAVars.asset1],
-		asset2_symbol: registryVars['a2s_' + curveAAVars.asset2],
+		asset1_symbol: asset1_symbol,
+		asset2_symbol: asset2_symbol,
 		reserve_asset: reserve_asset,
-		reserve_asset_decimals: reserve_asset == 'base' ? 9 : registryVars['decimals_' + current_desc],
-		reserve_asset_symbol: reserve_asset == 'base' ? 'GB' : registryVars['a2s_' + reserve_asset],
+		reserve_asset_decimals: reserve_asset == 'base' ? 9 : reserve_asset_decimals,
+		reserve_asset_symbol: reserve_asset == 'base' ? 'GB' : reserve_asset_symbol,
 		leverage: curveAADefinition[1].params.leverage || 0
 	}
 	if (fundAsset) {
 		assocCurveAAs[curveAAAddress].fund_asset = fundAsset;
-		assocCurveAAs[curveAAAddress].fund_asset_symbol = registryVars['a2s_' + fundAsset];
+		assocCurveAAs[curveAAAddress].fund_asset_symbol = fund_asset_symbol;
 	}		
 }
 
-function getStateVarsForPrefixes(aa_address, arrPrefixes){
+function readStateVarsForPrefixes(aa_address, arrPrefixes){
 	return new Promise(function(resolve){
 		Promise.all(arrPrefixes.map((prefix)=>{
 			return DAG.readAAStateVars(aa_address, prefix)
@@ -161,32 +120,6 @@ function getStateVarsForPrefixes(aa_address, arrPrefixes){
 			return resolve({});
 		});
 	});
-}
-
-function getTriggerUnitData(objTriggerUnit){
-	for (var i=0; i < objTriggerUnit.messages.length; i++)
-	if (objTriggerUnit.messages[i].app === 'data') // AA considers only the first data message
-		return objTriggerUnit.messages[i].payload;
-	return {};
-}
-
-function getAmountFromUnit(objUnit, to_address, asset = 'base'){
-	if (!objUnit)
-		return 0;
-	let amount = 0;
-	objUnit.messages.forEach(function (message){
-		if (message.app !== 'payment')
-			return;
-		const payload = message.payload;
-		if (asset == 'base' && payload.asset || asset != 'base' && asset !== payload.asset)
-			return;
-		payload.outputs.forEach(function (output){
-			if (output.address === to_address) {
-				amount += output.amount; // in case there are several outputs
-			}
-		});
-	});
-	return amount;
 }
 
 function handleJustsaying(ws, subject, body) {
