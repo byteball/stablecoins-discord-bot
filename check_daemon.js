@@ -2,5 +2,5 @@
 "use strict";
 var check_daemon = require('ocore/check_daemon.js');
 
-check_daemon.checkDaemonAndNotify('node run.js stablecoins-discord-bot');
+check_daemon.checkDaemonAndNotify('node start.js stablecoins-discord-bot');
 

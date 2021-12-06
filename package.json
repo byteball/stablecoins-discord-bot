@@ -1,9 +1,6 @@
 {
 	"name": "stablecoins-discord-bot",
 	"version": "0.1.0",
-	"scripts": {
-		"start": "node start.js stablecoins-discord-bot 2>errlog"
-	},
 	"dependencies": {
 		"ocore": "git+https://github.com/byteball/ocore.git",
 		"dotenv": "^8.2.0",
