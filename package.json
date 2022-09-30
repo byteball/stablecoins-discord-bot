@@ -8,6 +8,5 @@
 		"governance_events": "git+https://github.com/byteball/governance_events.git"
 	},
 	"resolutions": {
-		"level-rocksdb": "^4.0.0"
 	}
 }
